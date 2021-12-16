@@ -5,7 +5,7 @@
       <paths name="cluster33">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/arfeen/ZSDG_domainnet" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/arfeen/ZSDG_cumix_gpu1" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

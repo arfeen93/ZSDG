@@ -29,11 +29,11 @@ class CuMix(nn.Module):
 			self.va_classifier = UnitClassifier(attributes, va_classes, semantic_dim)
 			self.test_classifier = UnitClassifier(attributes, unseen_classes, semantic_dim)
 
-			self.mixup_ratio = nn.Sequential((OrderedDict([
-            ("fc8", nn.Linear(4096, 1024)),
-            ("relu8", nn.ReLU(inplace=True)),
-            ("drop8", nn.Dropout()),
-            ("fc10", nn.Linear(1024, 1))])) )
+			# self.mixup_ratio = nn.Sequential((OrderedDict([
+            # ("fc8", nn.Linear(4096, 1024)),
+            # ("relu8", nn.ReLU(inplace=True)),
+            # ("drop8", nn.Dropout()),
+            # ("fc10", nn.Linear(1024, 1))])) )
 
 	
 	def forward(self, x, mode='train'):

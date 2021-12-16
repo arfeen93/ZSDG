@@ -2,7 +2,7 @@ import os
 import numpy as np
 import glob
 
-_BASE_PATH = '/home/arfeen/ZSDG_domainnet/src/data/Domainnet'
+_BASE_PATH = '/home/arfeen/ZSDG_cumix_gpu1/src/data/Domainnet'
 
 
 def create_trval_splits(args):

@@ -14,7 +14,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
 
-sys.path.append('/home/arfeen/ZSDG_domainnet/src/')
+sys.path.append('/home/arfeen/ZSDG_domainnet_gpu1/src/')
 from options.options_cumix import Options
 from data.Domainnet.zsl_splits import domainnet_zsl
 from data.dataloaders import BaselineDataset
@@ -29,22 +29,23 @@ def main(args):
 	np.random.seed(args.seed)
 	torch.manual_seed(args.seed)
 	use_gpu = torch.cuda.is_available()
-
+	#import pdb;pdb.set_trace()
 	if use_gpu:
 		cudnn.benchmark = True
 		torch.cuda.manual_seed_all(args.seed)
-
-	device = torch.device("cuda:0" if use_gpu else "cpu")
+	# args.device = torch.device('cuda:' + str(args.gpu_id))
+	# print("args.device:", args.device)
+	device = torch.device("cuda:1" if use_gpu else "cpu")
 	print('\nDevice:{}'.format(device))
 
 	#args.root_path = args.root_path_remote
 	#args.checkpoint_path = args.checkpoint_path_remote
 
-	tr_classes = np.load('/home/arfeen/ZSDG_domainnet/src/data/Domainnet/zsl_splits/train_classes.npy').tolist()
-	va_classes = np.load('/home/arfeen/ZSDG_domainnet/src/data/Domainnet/zsl_splits/val_classes.npy').tolist()
-	te_classes = np.load('/home/arfeen/ZSDG_domainnet/src/data/Domainnet/zsl_splits/test_classes.npy').tolist()
+	tr_classes = np.load('/home/arfeen/ZSDG_domainnet_gpu1/src/data/Domainnet/zsl_splits/train_classes.npy').tolist()
+	va_classes = np.load('/home/arfeen/ZSDG_domainnet_gpu1/src/data/Domainnet/zsl_splits/val_classes.npy').tolist()
+	te_classes = np.load('/home/arfeen/ZSDG_domainnet_gpu1/src/data/Domainnet/zsl_splits/test_classes.npy').tolist()
 
-	semantic_vec = np.load('/home/arfeen/ZSDG_domainnet/src/data/Domainnet/w2v_domainnet.npy', allow_pickle=True,
+	semantic_vec = np.load('/home/arfeen/ZSDG_domainnet_gpu1/src/data/Domainnet/w2v_domainnet.npy', allow_pickle=True,
                            encoding='latin1').item()
 	if not args.trainvalid:
 		seen_classes = tr_classes
@@ -81,7 +82,8 @@ def main(args):
 
 	# Model
 	model = CuMix(args.backbone, seen_classes, va_classes, unseen_classes, semantic_vec, input_dim=2048, semantic_dim=args.semantic_emb_size,
-				  dg_only=args.dg_only).cuda()
+				  dg_only=args.dg_only).to(device)
+	#model = model.to(device)
 
 	save_folder_name = args.holdout_domain
 	path_cp = os.path.join(args.checkpoint_path, args.dataset, save_folder_name)

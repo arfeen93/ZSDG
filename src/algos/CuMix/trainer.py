@@ -1,9 +1,9 @@
 import os
 import time
 import numpy as np
-import math
-import pickle
-import paramiko
+#import math
+#import pickle
+#import paramiko
 
 import torch
 import torch.backends.cudnn as cudnn
@@ -14,7 +14,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
 from torch.nn import MSELoss
 import sys
-sys.path.append('/home/arfeen/ZSDG_domainnet/src/')
+sys.path.append('/home/arfeen/ZSDG_cumix_gpu1/src/')
 from data.dataloaders import CuMixloader
 from data.sampler import BalancedSampler
 from data.dataloaders import BaselineDataset
@@ -28,9 +28,10 @@ from data.Domainnet.zsl_splits import domainnet_zsl
 
 class Trainer:
 	
-	def __init__(self, args):
+	def __init__(self, args, device):
 
 		self.args = args
+		self.device = device
 		print('root_path:', args.root_path)
 		if not args.transfer2remote:
 			args.root_path = args.root_path_remote
@@ -134,7 +135,7 @@ class Trainer:
 		#semantic_vec = data[0]
 		# Model
 		self.model = CuMix(args.backbone, self.seen_classes, self.va_classes, self.unseen_classes, semantic_vec, input_dim=2048,
-						   semantic_dim=args.semantic_emb_size, dg_only=args.dg_only).cuda()
+						   semantic_dim=args.semantic_emb_size, dg_only=args.dg_only).to(device)
 		
 		self.criterion = nn.CrossEntropyLoss()
 		self.mixup_criterion = self.soft_cce
@@ -191,7 +192,7 @@ class Trainer:
 	
 	def adjust_learning_rate(self):
 
-		scale_lr = 0.1**(self.current_epoch//6)
+		scale_lr = 0.1**(self.current_epoch//6) # //10
 		
 		lr_net = self.args.lr_net*scale_lr
 		lr_clf = self.args.lr_clf*scale_lr
@@ -206,7 +207,7 @@ class Trainer:
 	# Create one hot labels
 	def create_one_hot(self, y):
 		
-		y_onehot = torch.LongTensor(y.size(0), len(self.seen_classes)).cuda()
+		y_onehot = torch.LongTensor(y.size(0), len(self.seen_classes)).to(self.device)
 		y_onehot.zero_()
 		y_onehot.scatter_(1, y.view(-1, 1), 1)
 		
@@ -217,7 +218,7 @@ class Trainer:
 
 		if resume_dict is not None:
 			print('==> Resuming from checkpoint: ',resume_dict)
-			checkpoint = torch.load(os.path.join(self.path_cp, resume_dict+'.pth'))
+			checkpoint = torch.load(os.path.join(self.path_cp_remote, resume_dict+'.pth'))
 			self.start_epoch = checkpoint['epoch']+1
 			self.model.load_state_dict(checkpoint['model_state_dict'])
 			self.optimizer_net.load_state_dict(checkpoint['optimizer_net_state_dict'])
@@ -252,7 +253,7 @@ class Trainer:
 			ratio = np.expand_dims(batch_ratios, axis=1)
 		elif mixup_level=='img':
 			ratio = np.expand_dims(batch_ratios, axis=(1, 2, 3))
-		ratio = torch.from_numpy(ratio).float().cuda()
+		ratio = torch.from_numpy(ratio).float().to(self.device)
 
 		doms = list(range(len(torch.unique(domain_ids))))
 		bs = X.size(0) // len(doms)
@@ -269,7 +270,7 @@ class Trainer:
 		X_mix = ratio*X + (1 - ratio)*X[mixed_indices]
 
 		batch_ratios = np.expand_dims(batch_ratios, axis=1)
-		batch_ratios = torch.from_numpy(batch_ratios).float().cuda()
+		batch_ratios = torch.from_numpy(batch_ratios).float().to(self.device)
 		y_mix = batch_ratios*y + (1 - batch_ratios)*y[mixed_indices]
 		self.clss_perm = self.clss[mixed_indices]
 		self.batch_ratios = batch_ratios
@@ -284,23 +285,19 @@ class Trainer:
 		cce_loss = AverageMeter()
 		mixup_img_loss = AverageMeter()
 		mixup_feat_loss = AverageMeter()
-		barlow_loss = AverageMeter()
-		mix_ratio_loss = AverageMeter()
 		total_loss = AverageMeter()
 		#import pdb;pdb.set_trace()
-		barlow_l = 0
-		mix_ratio_l = torch.tensor(0)
 		# Start counting time
 		time_start = time.time()
 
 		for i, (im, cl, domain_ids) in enumerate(self.train_loader):
 
 			# Transfer im to cuda
-			im = im.float().cuda()
+			im = im.float().to(self.device)
 			# Get numeric classes
 			num_clss = utils.numeric_classes(cl, self.dict_clss_tr)
 			#import pdb;pdb.set_trace()
-			cls_numeric = torch.from_numpy(num_clss).long().cuda()
+			cls_numeric = torch.from_numpy(num_clss).long().to(self.device)
 			self.clss = cls_numeric
 			one_hot_labels = self.create_one_hot(cls_numeric)
 
@@ -320,33 +317,34 @@ class Trainer:
 			img_mix_l = self.mixup_criterion(clf_out_mix, label_mix)
 
 			"Barlow twin losses"
-			if self.mixup_domain !=0:
-				mixed_semantic_proj = self.model.semantic_projector(feat_mix)
-				orig_semantic_proj = self.model.semantic_projector(features)
-				sizes = 300  # semantic dimension
-				self.bn = nn.BatchNorm1d(sizes, affine=False).cuda()
-				c = torch.t(self.bn(mixed_semantic_proj)) @ self.bn(orig_semantic_proj)
-				c.div_(self.args.batch_size)
-				on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
-				off_diag = self.off_diagonal(c).pow_(2).sum()
-				barlow_l = on_diag + self.args.lambd * off_diag
-				loss = self.args.wcce * cce_l + self.args.mixup_w_feat * feat_mix_l + self.args.mixup_w_img * img_mix_l + \
-					   self.args.mixup_w_barlow * barlow_l
+			#if self.mixup_domain !=0:
+			# mixed_semantic_proj = self.model.semantic_projector(feat_mix)
+			# orig_semantic_proj = self.model.semantic_projector(features)
+			# sizes = 300  # semantic dimension
+			# self.bn = nn.BatchNorm1d(sizes, affine=False).cuda()
+			# c = torch.t(self.bn(mixed_semantic_proj)) @ self.bn(orig_semantic_proj)
+			# c.div_(self.args.batch_size)
+			# on_diag = torch.diagonal(c).add_(-1).pow_(2).sum()
+			# off_diag = self.off_diagonal(c).pow_(2).sum()
+			# barlow_l = on_diag + self.args.lambd * off_diag
+			# loss = self.args.wcce * cce_l + self.args.mixup_w_feat * feat_mix_l + self.args.mixup_w_img * img_mix_l + \
+			# 	   self.args.mixup_w_barlow * barlow_l
 
-				"Mixup ratio prediction"
+			# loss = self.args.wcce * cce_l + self.args.mixup_w_feat * feat_mix_l + self.args.mixup_w_img * img_mix_l + \
+			# 	   self.args.mixup_w_barlow * barlow_l
+			
+			"Mixup ratio prediction"
 
-			elif self.mixup_domain == 0:
-				orig_mixed_cat_feat = torch.cat((feat_mix, features), 1)
-				ratio_pred = self.model.mixup_ratio(orig_mixed_cat_feat)
-				ratio_pred = torch.sigmoid(ratio_pred)
-				#import pdb;pdb.set_trace()
-				lamdba_gt = [1 if self.clss[j] == self.clss_perm[j] else self.batch_ratios[j]  for j in range(len(self.batch_ratios))]
-				lamdba_gt = torch.Tensor(lamdba_gt)
-				lamdba_gt = lamdba_gt.reshape(lamdba_gt.shape[0], 1).cuda()
-				mix_ratio_l = MSELoss()(lamdba_gt, ratio_pred)
-				loss = self.args.wcce * cce_l + self.args.mixup_w_feat * feat_mix_l + self.args.mixup_w_img * img_mix_l + \
-				    self.args.mixup_w_mix_ratio * mix_ratio_l
-
+			# if self.mixup_domain == 0:
+			# 	orig_mixed_cat_feat = torch.cat((feat_mix, features), 1)
+			# 	ratio_pred = self.model.mixup_ratio(orig_mixed_cat_feat)
+			# 	ratio_pred = torch.sigmoid(ratio_pred)
+			# 	#import pdb;pdb.set_trace()
+			# 	lamdba_gt = [1 if self.clss[j] == self.clss_perm[j] else self.batch_ratios[j]  for j in range(len(self.batch_ratios))]
+			# 	lamdba_gt = torch.Tensor(lamdba_gt)
+			# 	lamdba_gt = lamdba_gt.reshape(lamdba_gt.shape[0], 1).cuda()
+			# 	mix_ratio_l = MSELoss()(lamdba_gt, ratio_pred)
+			loss = self.args.wcce * cce_l + self.args.mixup_w_feat * feat_mix_l + self.args.mixup_w_img * img_mix_l
 			loss.backward()
 			
 			self.optimizer_net.step()
@@ -356,8 +354,6 @@ class Trainer:
 			cce_loss.update(cce_l.item(), im.size(0))
 			mixup_feat_loss.update(feat_mix_l.item(), im.size(0))
 			mixup_img_loss.update(img_mix_l.item(), im.size(0))
-			barlow_loss.update(barlow_l.item(), im.size(0))
-			mix_ratio_loss.update(mix_ratio_l.item(), im.size(0))
 			total_loss.update(loss.item(), im.size(0))
 
 
@@ -373,12 +369,9 @@ class Trainer:
 					  'cce {cce.val:.4f} ({cce.avg:.4f})\t'
 					  'feat {feat.val:.4f} ({feat.avg:.4f})\t'
 					  'img {img.val:.4f} ({img.avg:.4f})\t'
-					  'barlow {barlow.val:.4f} ({barlow.avg:.4f})\t'
-					  'mix_ratio {mix_ratio.val:.4f} ({mix_ratio.avg:.4f})\t'
 					  'net {net.val:.4f} ({net.avg:.4f})\t'
 					  .format(self.current_epoch+1, self.args.epochs, i+1, len(self.train_loader), batch_time=batch_time, 
-							  cce=cce_loss, feat=mixup_feat_loss, img=mixup_img_loss, barlow=barlow_loss,
-							  mix_ratio=mix_ratio_loss, net=total_loss))
+							  cce=cce_loss, feat=mixup_feat_loss, img=mixup_img_loss, net=total_loss))
 
 			# if (i+1)==50:
 			#     break
@@ -487,10 +480,11 @@ def evaluate(loader_image, model, dict_clss, tgt_classes, epoch, args, mode):
 
 	# Start counting time
 	start = time.time()
-
+	use_gpu = torch.cuda.is_available()
+	device = torch.device("cuda:1" if use_gpu else "cpu")
 	for i, (im, cls_im) in enumerate(loader_image):
 
-		im = im.float().cuda()
+		im = im.float().to(device)
 		# Get numeric classes
 		cls_numeric = utils.numeric_classes(cls_im, dict_clss)
 

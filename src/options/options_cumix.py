@@ -12,8 +12,8 @@ class Options:
         
         parser.add_argument('-root_l', '--root_path', default='/mnt/c61a35bf-fc59-4aab-a996-b254f9ab9052/arfeen', type=str)
         parser.add_argument('-root_r', '--root_path_remote', default='/home/arfeen/datasets/', type=str)
-        parser.add_argument('-path_cpl', '--checkpoint_path', default='/mnt/c61a35bf-fc59-4aab-a996-b254f9ab9052/arfeen/saved_models/CuMix/', type=str)
-        parser.add_argument('-path_cpr', '--checkpoint_path_remote', default='/home/arfeen/ZSDG_domainnet/saved_models/CuMix/', type=str)
+        parser.add_argument('-path_cpl', '--checkpoint_path', default='/mnt/c61a35bf-fc59-4aab-a996-b254f9ab9052/arfeen/saved_models/CuMix_only/gpu1/', type=str)
+        parser.add_argument('-path_cpr', '--checkpoint_path_remote', default='/home/arfeen/ZSDG_cumix_gpu1/saved_models/CuMix/', type=str)
         parser.add_argument('-resume', '--resume_dict', default=None, type=str, help='checkpoint file to resume training from')
         parser.add_argument('-tr', '--transfer2remote', choices=[0, 1], default=1, type=int, help='use path_cpl/path_cpr for storing models.')
 
@@ -42,13 +42,13 @@ class Options:
         
         # Model parameters
         parser.add_argument('-seed', '--seed', type=int, default=0)
-        parser.add_argument('-beta', '--mixup_beta', type=float, default=1, help='mixup interpolation coefficient')
-        parser.add_argument('-step', '--mixup_step', type=int, default=2, help='Initial warmup steps for domain and class mixing ratios.')
+        parser.add_argument('-beta', '--mixup_beta', type=float, default=1, help='mixup interpolation coefficient') # // default : 1
+        parser.add_argument('-step', '--mixup_step', type=int, default=2, help='Initial warmup steps for domain and class mixing ratios.') #//default: 2
         parser.add_argument('-bs', '--batch_size', default=45, type=int)
         parser.add_argument('-nw', '--num_workers', type=int, default=8, help='Number of workers in data loader')
         
         # Optimization parameters
-        parser.add_argument('-e', '--epochs', type=int, default=10, metavar='N', help='Number of epochs to train (default: 100)')
+        parser.add_argument('-e', '--epochs', type=int, default=8, metavar='N', help='Number of epochs to train (default: 100)')
         parser.add_argument('-lrb', '--lr_net', type=float, default=0.0001, metavar='LR', help='Initial learning rate for backbone')
         parser.add_argument('-lrc', '--lr_clf', type=float, default=0.001, metavar='LR', help='Initial learning rate for classifier')
 
